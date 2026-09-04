@@ -58,13 +58,32 @@ def do_checkin(code: str) -> bool:
         page.goto(CHECKIN_URL, wait_until="networkidle")
 
         # Using label-based selectors so this survives minor HTML/ID changes.
-        page.get_by_label("Email").fill(CHECKIN_EMAIL)
-        page.get_by_label("Check In Code").fill(code)
-        page.get_by_role("button", name="Check In").click()
+        email_field = page.get_by_label("Email")
+        code_field = page.get_by_label("Check In Code")
+        submit_button = page.get_by_role("button", name="Check In")
+
+        # The form appears to render in slightly after the page reports
+        # "loaded", so explicitly wait for each field to become visible
+        # before interacting with it (rather than relying on networkidle).
+        email_field.wait_for(state="visible", timeout=15000)
+        email_field.fill(CHECKIN_EMAIL)
+
+        code_field.wait_for(state="visible", timeout=15000)
+        code_field.fill(code)
+
+        submit_button.wait_for(state="visible", timeout=15000)
+        submit_button.click()
 
         page.wait_for_timeout(3000)  # let the confirmation render
 
+        # Always grab a screenshot for debugging, whether it succeeded or not.
+        os.makedirs("/tmp/debug", exist_ok=True)
+        page.screenshot(path="/tmp/debug/checkin_result.png", full_page=True)
+
         content = page.content().lower()
+        with open("/tmp/debug/checkin_result.html", "w") as f:
+            f.write(page.content())
+
         browser.close()
 
         # NOTE: You'll likely need to tune this after your first real test run,
