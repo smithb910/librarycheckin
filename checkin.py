@@ -104,10 +104,15 @@ def main():
     sheet = get_sheet()
     rows = sheet.get_all_records()  # list of dicts, keyed by header row
     now = datetime.now(ZoneInfo(TIMEZONE))
+    print(f"Current time ({TIMEZONE}): {now}")
+    print(f"Read {len(rows)} row(s) from sheet. Headers found: {list(rows[0].keys()) if rows else 'N/A'}")
 
     for idx, row in enumerate(rows, start=2):  # row 1 is the header
+        print(f"--- Row {idx} raw data: {row}")
+
         status = str(row.get("Status", "")).strip()
         if status == STATUS_DONE:
+            print(f"Row {idx}: already marked Done, skipping.")
             continue
 
         date_str = str(row.get("Date", "")).strip()
@@ -115,16 +120,18 @@ def main():
         code = str(row.get("Code", "")).strip()
 
         if not date_str or not time_str or not code:
+            print(f"Row {idx}: missing Date/Time/Code (got Date='{date_str}', Time='{time_str}', Code='{code}'), skipping.")
             continue
 
         try:
             start_time = parse_reservation_time(date_str, time_str)
         except ValueError:
-            print(f"Row {idx}: couldn't parse date/time '{date_str} {time_str}', skipping.")
+            print(f"Row {idx}: couldn't parse date/time '{date_str} {time_str}' (expected 'YYYY-MM-DD' and 'HH:MM'), skipping.")
             continue
 
         window_start = start_time - timedelta(minutes=WINDOW_MINUTES)
         window_end = start_time + timedelta(minutes=WINDOW_MINUTES)
+        print(f"Row {idx}: window is {window_start} to {window_end}")
 
         if window_start <= now <= window_end:
             print(f"Row {idx}: within check-in window, attempting check-in with code {code}...")
