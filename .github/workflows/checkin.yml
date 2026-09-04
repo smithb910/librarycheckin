@@ -1,1 +1,32 @@
+name: Room Check-In Bot
 
+on:
+  schedule:
+    # Runs every 5 minutes. GitHub's scheduler can lag a few minutes under
+    # load, which is fine here since the window itself is 30 minutes wide.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}  # lets you trigger it manually from the Actions tab to test
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run check-in script
+        env:
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          CHECKIN_EMAIL: ${{ secrets.CHECKIN_EMAIL }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+        run: python checkin.py
