@@ -30,3 +30,11 @@ jobs:
           CHECKIN_EMAIL: ${{ secrets.CHECKIN_EMAIL }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: python checkin.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkin-debug
+          path: /tmp/debug/
+          if-no-files-found: ignore
