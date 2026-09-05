@@ -52,39 +52,47 @@ def parse_reservation_time(date_str, time_str):
 
 def do_checkin(code: str) -> bool:
     """Returns True if check-in appears successful."""
+    os.makedirs("/tmp/debug", exist_ok=True)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(CHECKIN_URL, wait_until="networkidle")
+        content = ""
 
-        # Using label-based selectors so this survives minor HTML/ID changes.
-        email_field = page.get_by_label("Email")
-        code_field = page.get_by_label("Check In Code")
-        submit_button = page.get_by_role("button", name="Check In")
+        try:
+            page.goto(CHECKIN_URL, wait_until="networkidle")
 
-        # The form appears to render in slightly after the page reports
-        # "loaded", so explicitly wait for each field to become visible
-        # before interacting with it (rather than relying on networkidle).
-        email_field.wait_for(state="visible", timeout=15000)
-        email_field.fill(CHECKIN_EMAIL)
+            # This page has a hidden no-JS fallback form in addition to the
+            # real interactive one, so we target the *visible* input
+            # directly rather than trusting get_by_label (which matched the
+            # hidden fallback field). We scope to the same <form> as the
+            # visible email field so we reliably grab its sibling code field
+            # and submit button, whatever their exact names/ids turn out to be.
+            page.wait_for_selector('input[type="email"]:visible', timeout=15000)
+            email_input = page.locator('input[type="email"]:visible').first
+            form = email_input.locator("xpath=ancestor::form[1]")
 
-        code_field.wait_for(state="visible", timeout=15000)
-        code_field.fill(code)
+            code_input = form.locator(
+                'input:visible:not([type="email"]):not([type="hidden"]):not([type="submit"])'
+            ).first
+            submit_button = form.locator(
+                'button:visible, input[type="submit"]:visible'
+            ).first
 
-        submit_button.wait_for(state="visible", timeout=15000)
-        submit_button.click()
+            email_input.fill(CHECKIN_EMAIL)
+            code_input.fill(code)
+            submit_button.click()
 
-        page.wait_for_timeout(3000)  # let the confirmation render
-
-        # Always grab a screenshot for debugging, whether it succeeded or not.
-        os.makedirs("/tmp/debug", exist_ok=True)
-        page.screenshot(path="/tmp/debug/checkin_result.png", full_page=True)
-
-        content = page.content().lower()
-        with open("/tmp/debug/checkin_result.html", "w") as f:
-            f.write(page.content())
-
-        browser.close()
+            page.wait_for_timeout(3000)  # let the confirmation render
+        except Exception as e:
+            print(f"Exception during check-in: {e}")
+        finally:
+            # Always capture what the page looked like, success or failure.
+            page.screenshot(path="/tmp/debug/checkin_result.png", full_page=True)
+            with open("/tmp/debug/checkin_result.html", "w") as f:
+                f.write(page.content())
+            content = page.content().lower()
+            browser.close()
 
         # NOTE: You'll likely need to tune this after your first real test run,
         # based on what the actual success/error message says.
