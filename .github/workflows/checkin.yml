@@ -27,7 +27,6 @@ jobs:
       - name: Run check-in script
         env:
           SHEET_ID: ${{ secrets.SHEET_ID }}
-          CHECKIN_EMAIL: ${{ secrets.CHECKIN_EMAIL }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: python checkin.py
 
