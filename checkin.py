@@ -20,7 +20,6 @@ from playwright.sync_api import sync_playwright
 
 # ---- Configuration (set these as environment variables / GitHub secrets) ----
 SHEET_ID = os.environ["SHEET_ID"]
-CHECKIN_EMAIL = os.environ["CHECKIN_EMAIL"]
 GOOGLE_CREDENTIALS_JSON = os.environ["GOOGLE_CREDENTIALS_JSON"]  # full JSON key, as a string
 
 CHECKIN_URL = "https://pr.erau.libcal.com/r/checkin"
@@ -62,26 +61,14 @@ def do_checkin(code: str) -> bool:
         try:
             page.goto(CHECKIN_URL, wait_until="networkidle")
 
-            # This page has a hidden no-JS fallback form in addition to the
-            # real interactive one, so we target the *visible* input
-            # directly rather than trusting get_by_label (which matched the
-            # hidden fallback field). We scope to the same <form> as the
-            # visible email field so we reliably grab its sibling code field
-            # and submit button, whatever their exact names/ids turn out to be.
-            page.wait_for_selector('input[type="email"]:visible', timeout=15000)
-            email_input = page.locator('input[type="email"]:visible').first
-            form = email_input.locator("xpath=ancestor::form[1]")
-
-            code_input = form.locator(
-                'input:visible:not([type="email"]):not([type="hidden"]):not([type="submit"])'
-            ).first
-            submit_button = form.locator(
-                'button:visible, input[type="submit"]:visible'
-            ).first
-
-            email_input.fill(CHECKIN_EMAIL)
-            code_input.fill(code)
-            submit_button.click()
+            # The real form only has a single "Check In Code" field
+            # (id="s-lc-code", name="code") and a "Check In" button.
+            # There's a separate hidden no-JS fallback form elsewhere in
+            # the DOM that includes an email field, but the real, visible
+            # form doesn't ask for one at all.
+            page.wait_for_selector("#s-lc-code", state="visible", timeout=15000)
+            page.locator("#s-lc-code").fill(code)
+            page.get_by_role("button", name="Check In").click()
 
             page.wait_for_timeout(3000)  # let the confirmation render
         except Exception as e:
@@ -94,12 +81,18 @@ def do_checkin(code: str) -> bool:
             content = page.content().lower()
             browser.close()
 
-        # NOTE: You'll likely need to tune this after your first real test run,
-        # based on what the actual success/error message says.
+        # NOTE: If this still misjudges success/failure, check the debug
+        # screenshot/HTML after a real attempt and adjust below. Two ways
+        # to tell them apart, in order of reliability:
+        #   1. The #s-lc-code input disappearing from the page (usually
+        #      means it was accepted and replaced with a confirmation).
+        #   2. Wording on the resulting page (fallback, less reliable).
+        code_field_gone = "s-lc-code" not in content
+
         success_markers = ["checked in", "success", "thank you"]
         failure_markers = ["invalid", "error", "not found", "expired"]
 
-        if any(m in content for m in success_markers):
+        if code_field_gone or any(m in content for m in success_markers):
             return True
         if any(m in content for m in failure_markers):
             return False
